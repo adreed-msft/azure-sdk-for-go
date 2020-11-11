@@ -9,7 +9,9 @@ $renamedFiles = (git diff $targetBranch HEAD --diff-filter=R)
 $changedMarkdowns = (git diff $targetBranch HEAD --name-only -- '*.md')
 
 $beforeRenameFiles = @()
-# Retrieve the renamed from files.
+# Retrieve the 'renamed from' files. Git command only returns back the files after rename. 
+# In order to have the files path before rename, it has to do some regex checking. 
+# It is better to be replaced by more reliable commands if any.
 foreach ($file in $renamedFiles) {
 	if ($file -match "^rename from (.*)$") {
 			$beforeRenameFiles += $file -replace "^rename from (.*)$", '$1'
