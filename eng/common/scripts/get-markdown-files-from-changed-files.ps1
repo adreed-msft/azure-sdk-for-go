@@ -25,7 +25,7 @@ $changedMarkdowns = $changedMarkdowns | Where-Object { $deletedFiles -notcontain
 $markdownContainLinks = @()
 $allMarkdownFiles = Get-ChildItem -Path $RootRepo -Recurse -Include *.md
 foreach ($f in $allMarkdownFiles) {
-	$filePath = $f.ToString()
+	$filePath = $f.FullName
 	$content = Get-Content -Path $filePath -Raw
 	foreach ($l in $relativePathLinks) {
 			if ($content -match $l) {
