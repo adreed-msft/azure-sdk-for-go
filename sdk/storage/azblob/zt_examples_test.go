@@ -88,13 +88,20 @@ func Example() {
 	// The ListBlobs and ListContainers APIs return two channels, a values channel, and an errors channel.
 	// You should enumerate on a range over the values channel, and then check the errors channel, as only ONE value will ever be passed to the errors channel.
 	// The AutoPagerTimeout defines how long it will wait to place into the items channel before it exits & cleans itself up. A zero time will result in no timeout.
-	blobs, errs := container.ListBlobsFlatSegment(ctx, 1, 0, nil)
+	pager := container.ListBlobsFlatSegment(ctx, nil)
 
-	for blobItem := range blobs {
-		fmt.Println(*blobItem.Name)
-	}
-	if err = <-errs; err != nil {
-		log.Fatal(err)
+	for pager.NextPage(ctx) {
+		if err := pager.Err(); err != nil {
+			log.Fatal(err)
+		}
+
+		page := pager.PageResponse()
+
+		if page.EnumerationResults.Segment.BlobItems != nil {
+			for _, v := range *page.EnumerationResults.Segment.BlobItems {
+				fmt.Println(*v.Name)
+			}
+		}
 	}
 
 	// Delete the blob we created earlier.
@@ -796,18 +803,37 @@ func Example_blobSnapshots() {
 
 	// Show all blobs in the container with their snapshots:
 	// List the blob(s) in our container; since a container may hold millions of blobs, this is done 1 segment at a time.
-	blobs, errs := containerClient.ListBlobsFlatSegment(ctx, 0, 0, nil)
-	for blob := range blobs { // range over a channel doesn't block, so, if there's an immediate error, it's happy.
-		// Process the blobs returned
-		snapTime := "N/A"
-		if blob.Snapshot != nil {
-			snapTime = *blob.Snapshot
+	pager := containerClient.ListBlobsFlatSegment(ctx, nil)
+	for pager.NextPage(ctx) {
+		if err := pager.Err(); err != nil {
+			log.Fatal(err)
 		}
-		fmt.Printf("Blob name: %s, Snapshot: %s\n", *blob.Name, snapTime)
+
+		resp := pager.PageResponse()
+
+		if resp.EnumerationResults.Segment.BlobItems != nil {
+			for _, blob := range *resp.EnumerationResults.Segment.BlobItems {
+				snapTime := "N/A"
+				if blob.Snapshot != nil {
+					snapTime = *blob.Snapshot
+				}
+
+				fmt.Printf("Blob name: %s, Snapshot: %s\n", *blob.Name, snapTime)
+			}
+		}
 	}
-	if err = <-errs; err != nil { // Getting
-		log.Fatal(err)
-	}
+
+	// for blob := range blobs { // range over a channel doesn't block, so, if there's an immediate error, it's happy.
+	// 	// Process the blobs returned
+	// 	snapTime := "N/A"
+	// 	if blob.Snapshot != nil {
+	// 		snapTime = *blob.Snapshot
+	// 	}
+	// 	fmt.Printf("Blob name: %s, Snapshot: %s\n", *blob.Name, snapTime)
+	// }
+	// if err = <-errs; err != nil { // Getting
+	// 	log.Fatal(err)
+	// }
 
 	// Promote read-only snapshot to writable base blob:
 	_, err = baseBlobURL.StartCopyFromURL(ctx, snapshotBlobURL.URL(), nil)

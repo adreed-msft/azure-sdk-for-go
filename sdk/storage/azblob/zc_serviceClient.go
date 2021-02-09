@@ -124,18 +124,12 @@ func NewKeyInfo(Start, Expiry time.Time) KeyInfo {
 // AutoPagerTimeout specifies the amount of time with no read operations before the channel times out and closes. Specify no time and it will be ignored.
 // AutoPagerBufferSize specifies the channel's buffer size.
 // Both the blob item channel and error channel should be watched. Only one error will be released via this channel (or a nil error, to register a clean exit.)
-func (s ServiceClient) ListContainersSegment(ctx context.Context, AutoPagerBufferSize uint, AutoPagerTimeout time.Duration, o *ListContainersSegmentOptions) (chan ContainerItem, chan error) {
-	output := make(chan ContainerItem, AutoPagerBufferSize)
-	errChan := make(chan error, 1)
-
+func (s ServiceClient) ListContainersSegment(ctx context.Context, o *ListContainersSegmentOptions) (ListContainersSegmentResponsePager, error) {
 	listOptions := o.pointers()
 	pager := s.client.ListContainersSegment(listOptions)
 	// override the generated advancer, which is incorrect
-	if pager.Err() != nil {
-		errChan <- pager.Err()
-		close(output)
-		close(errChan)
-		return output, errChan
+	if err := pager.Err(); err != nil {
+		return nil, err
 	}
 
 	p := pager.(*listContainersSegmentResponsePager) // cast to the internal type first
@@ -154,17 +148,50 @@ func (s ServiceClient) ListContainersSegment(ctx context.Context, AutoPagerBuffe
 		return req, nil
 	}
 
-	go listContainersSegmentAutoPager{
-		pager,
-		output,
-		errChan,
-		ctx,
-		AutoPagerTimeout,
-		nil,
-	}.Go()
-
-	return output, errChan
+	return p, nil
 }
+
+// func (s ServiceClient) ListContainersSegment(ctx context.Context, AutoPagerBufferSize uint, AutoPagerTimeout time.Duration, o *ListContainersSegmentOptions) (chan ContainerItem, chan error) {
+// 	output := make(chan ContainerItem, AutoPagerBufferSize)
+// 	errChan := make(chan error, 1)
+//
+// 	listOptions := o.pointers()
+// 	pager := s.client.ListContainersSegment(listOptions)
+// 	// override the generated advancer, which is incorrect
+// 	if pager.Err() != nil {
+// 		errChan <- pager.Err()
+// 		close(output)
+// 		close(errChan)
+// 		return output, errChan
+// 	}
+//
+// 	p := pager.(*listContainersSegmentResponsePager) // cast to the internal type first
+// 	p.advancer = func(cxt context.Context, response ListContainersSegmentResponseResponse) (*azcore.Request, error) {
+// 		if response.EnumerationResults.NextMarker == nil {
+// 			return nil, errors.New("unexpected missing NextMarker")
+// 		}
+// 		req, err := s.client.listContainersSegmentCreateRequest(ctx, listOptions)
+// 		if err != nil {
+// 			return nil, err
+// 		}
+// 		queryValues, _ := url.ParseQuery(req.URL.RawQuery)
+// 		queryValues.Set("marker", *response.EnumerationResults.NextMarker)
+//
+// 		req.URL.RawQuery = queryValues.Encode()
+// 		return req, nil
+// 	}
+//
+// 	go listContainersSegmentAutoPager{
+// 		pager,
+// 		output,
+// 		errChan,
+// 		ctx,
+// 		AutoPagerTimeout,
+// 		nil,
+// 	}.Go()
+//
+// 	return output, errChan
+// }
 
 func (s ServiceClient) GetProperties(ctx context.Context) (StorageServicePropertiesResponse, error) {
 	resp, err := s.client.GetProperties(ctx, nil)
