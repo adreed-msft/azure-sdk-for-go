@@ -15,20 +15,17 @@ import (
 
 //Creates a container and tests permissions by listing blobs
 func (s *aztestsSuite) TestUserDelegationSASContainer(c *chk.C) {
+	accountName, _ := accountInfo()
 	bsu := getBSU()
 	containerClient, containerName := getContainerClient(c, bsu)
 	currentTime := time.Now().UTC()
 	// Ensuring currTime <= time of sending delegating request request
-	keyInfo := KeyInfo{
-		Start:  to.StringPtr(currentTime.Format(SASTimeFormat)),
-		Expiry: to.StringPtr(currentTime.Add(48 * time.Hour).Format(SASTimeFormat)),
-	}
 	time.Sleep(2 * time.Second)
 
 	serviceClient, err := getGenericServiceClientWithOAuth(c, "")
 	c.Assert(err, chk.IsNil)
 
-	userDelegationCred, err := serviceClient.GetUserDelegationCredential(ctx, keyInfo)
+	userDelegationKey, err := serviceClient.GetUserDelegationCredential(ctx, currentTime.Add(48 * time.Hour), to.TimePtr(currentTime))
 	if err != nil {
 		c.Fatal(err)
 	}
@@ -39,7 +36,7 @@ func (s *aztestsSuite) TestUserDelegationSASContainer(c *chk.C) {
 		ExpiryTime:    currentTime.Add(24 * time.Hour),
 		Permissions:   "racwdl",
 		ContainerName: containerName,
-	}.NewSASQueryParameters(userDelegationCred)
+	}.NewSASQueryParametersFromUserDelegationKey(accountName, userDelegationKey)
 
 	// Create anonymous pipeline
 	//p = azcore.NewPipeline(NewAnonymousCredential(), PipelineOptions{})
@@ -87,6 +84,7 @@ func (s *aztestsSuite) TestUserDelegationSASContainer(c *chk.C) {
 // Creates a blob, takes a snapshot, downloads from snapshot, and deletes from the snapshot w/ the token
 func (s *aztestsSuite) TestUserDelegationSASBlob(c *chk.C) {
 	// Accumulate prerequisite details to create storage etc.
+	accountName, _ := accountInfo()
 	serviceClient, err := getGenericServiceClientWithOAuth(c, "")
 	c.Assert(err, chk.IsNil)
 
@@ -103,8 +101,7 @@ func (s *aztestsSuite) TestUserDelegationSASBlob(c *chk.C) {
 	}
 
 	// Prepare user delegation key
-	keyInfo := KeyInfo{Start: to.StringPtr(currentTime.String()), Expiry: to.StringPtr(currentTime.Add(48 * time.Hour).String())}
-	cudk, err := serviceClient.GetUserDelegationCredential(ctx, keyInfo)
+	cudk, err := serviceClient.GetUserDelegationCredential(ctx, currentTime.Add(48 * time.Hour), nil)
 	c.Assert(err, chk.IsNil)
 	c.Assert(cudk, chk.NotNil)
 
@@ -116,7 +113,7 @@ func (s *aztestsSuite) TestUserDelegationSASBlob(c *chk.C) {
 		Permissions:   "racwd",
 		ContainerName: containerName,
 		BlobName:      blobName,
-	}.NewSASQueryParameters(cudk)
+	}.NewSASQueryParametersFromUserDelegationKey(cudk)
 	c.Assert(err, chk.IsNil)
 
 	// Append User Delegation SAS token to URL
