@@ -30,13 +30,10 @@ type BlobSASSignatureValues struct {
 	ContentType        string // rsct
 }
 
-// NewSASQueryParameters uses an account's StorageAccountCredential to sign this signature values to produce
-// the proper SAS query parameters.
-// See: StorageAccountCredential. Compatible with both UserDelegationCredential and SharedKeyCredential
-func (v BlobSASSignatureValues) NewSASQueryParameters(credential StorageAccountCredential) (SASQueryParameters, error) {
+func (v BlobSASSignatureValues) baseNewSASQueryParameters(accountName string, key interface{ComputeHMACSHA256(message string) (base64String string)}) (SASQueryParameters, error) {
 	resource := "c"
-	if credential == nil {
-		return SASQueryParameters{}, fmt.Errorf("cannot sign SAS query without StorageAccountCredential")
+	if key == nil {
+		return SASQueryParameters{}, fmt.Errorf("cannot sign SAS query without a storage account key of some kind")
 	}
 
 	if !v.SnapshotTime.IsZero() {
@@ -98,9 +95,7 @@ func (v BlobSASSignatureValues) NewSASQueryParameters(credential StorageAccountC
 		snapshotTime:       v.SnapshotTime,
 	}
 
-	if udc, ok := credential.(UserDelegationCredential); ok {
-		udk := udc.GetUDKParams()
-
+	if udk, ok := key.(UserDelegationKey); ok {
 		udkStart, udkExpiry, _ := FormatTimesForSASSigning(*udk.SignedStart, *udk.SignedExpiry, time.Time{})
 		// I don't like this answer to combining the functions
 		// But because signedIdentifier and the user delegation key strings share a place, this is an _OK_ way to do it.
@@ -126,7 +121,7 @@ func (v BlobSASSignatureValues) NewSASQueryParameters(credential StorageAccountC
 		v.Permissions,
 		startTime,
 		expiryTime,
-		getCanonicalName(credential.AccountName(), v.ContainerName, v.BlobName),
+		getCanonicalName(accountName, v.ContainerName, v.BlobName),
 		signedIdentifier,
 		v.IPRange.String(),
 		string(v.Protocol),
@@ -140,9 +135,20 @@ func (v BlobSASSignatureValues) NewSASQueryParameters(credential StorageAccountC
 		v.ContentType},       // rsct
 		"\n")
 
-	p.signature = credential.ComputeHMACSHA256(stringToSign)
+	p.signature = key.ComputeHMACSHA256(stringToSign)
 
 	return p, nil
+}
+
+// NewSASQueryParameters uses an account's StorageAccountCredential to sign this signature values to produce
+// the proper SAS query parameters.
+// See: StorageAccountCredential. Compatible with both UserDelegationCredential and SharedKeyCredential
+func (v BlobSASSignatureValues) NewSASQueryParameters(credential StorageAccountCredential) (SASQueryParameters, error) {
+	return v.baseNewSASQueryParameters(credential.AccountName(), credential)
+}
+
+func (v BlobSASSignatureValues) NewSASQueryParametersFromUserDelegationKey(accountName string, key UserDelegationKey) (SASQueryParameters, error) {
+	return v.baseNewSASQueryParameters(accountName, key)
 }
 
 // getCanonicalName computes the canonical name for a container or blob resource for SAS signing.

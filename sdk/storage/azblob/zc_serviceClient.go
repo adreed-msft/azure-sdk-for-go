@@ -7,7 +7,6 @@ import (
 	"context"
 	"errors"
 	"net/url"
-	"strings"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
@@ -113,7 +112,7 @@ func (s ServiceClient) GetAccountInfo(ctx context.Context) (ServiceGetAccountInf
 // GetUserDelegationCredential obtains a UserDelegationKey object using the base ServiceClient object.
 // OAuth is required for this call, as well as any role that can delegate access to the storage account.
 // Strings in KeyInfo should be formatted with SASTimeFormat.
-func (s ServiceClient) GetUserDelegationCredential(ctx context.Context, expiry time.Time, startTime *time.Time) (UserDelegationCredential, error) {
+func (s ServiceClient) GetUserDelegationCredential(ctx context.Context, expiry time.Time, startTime *time.Time) (UserDelegationKey, error) {
 	if startTime == nil {
 		startTime = to.TimePtr(time.Now().UTC())
 	}
@@ -123,10 +122,10 @@ func (s ServiceClient) GetUserDelegationCredential(ctx context.Context, expiry t
 		Expiry: to.StringPtr(expiry.UTC().Format(SASTimeFormat)),
 	}, nil)
 	if err != nil {
-		return UserDelegationCredential{}, handleError(err)
+		return UserDelegationKey{}, handleError(err)
 	}
-	urlParts := NewBlobURLParts(s.URL())
-	return NewUserDelegationCredential(strings.Split(urlParts.Host, ".")[0], *udk.UserDelegationKey), nil
+
+	return *udk.UserDelegationKey, nil
 }
 
 // The List Containers Segment operation returns a pager of the containers under the specified account.
